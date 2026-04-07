@@ -128,37 +128,37 @@ def process_document(file_path: str) -> List[str]:
     return chunks
 
 # ================== TESTING BLOCK ==================
-if __name__ == "__main__":
-    from pathlib import Path
+# if __name__ == "__main__":
+#     from pathlib import Path
 
-    project_root = Path(__file__).parent.parent.parent
-    data_folder = project_root / "data" / "uploaded_docs"
+#     project_root = Path(__file__).parent.parent.parent
+#     data_folder = project_root / "data" / "uploaded_docs"
 
-    file_path = data_folder / "refference letter_Atif_DR. ARIFA BHUTTO, PHD.pdf"
+#     file_path = data_folder / "refference letter_Atif_DR. ARIFA BHUTTO, PHD.pdf"
 
-    try:
-        # 🔹 Debug mode (step-by-step inspection)
-        raw_text = load_document(file_path)
-        cleaned_text = clean_text(raw_text)
-        chunks = split_text(cleaned_text)
+#     try:
+#         # 🔹 Debug mode (step-by-step inspection)
+#         raw_text = load_document(file_path)
+#         cleaned_text = clean_text(raw_text)
+#         chunks = split_text(cleaned_text)
 
-        print("RAW PREVIEW:\n", raw_text[:500])
-        print("\n" + "="*50 + "\n")
-        print("CLEANED PREVIEW:\n", cleaned_text[:500])
+#         print("RAW PREVIEW:\n", raw_text[:500])
+#         print("\n" + "="*50 + "\n")
+#         print("CLEANED PREVIEW:\n", cleaned_text[:500])
 
-        print(f"\nTotal chunks: {len(chunks)}\n")
+#         print(f"\nTotal chunks: {len(chunks)}\n")
 
-        for i, chunk in enumerate(chunks[:3]):
-            print(f"--- Chunk {i+1} ---")
-            print(chunk[:300])
-            print()
+#         for i, chunk in enumerate(chunks[:3]):
+#             print(f"--- Chunk {i+1} ---")
+#             print(chunk[:300])
+#             print()
 
-        # 🔹 Pipeline mode (final check)
-        pipeline_chunks = process_document(file_path)
+#         # 🔹 Pipeline mode (final check)
+#         pipeline_chunks = process_document(file_path)
 
-        print("\n" + "="*50)
-        print("PIPELINE OUTPUT CHECK")
-        print(f"Chunks from process_document: {len(pipeline_chunks)}")
+#         print("\n" + "="*50)
+#         print("PIPELINE OUTPUT CHECK")
+#         print(f"Chunks from process_document: {len(pipeline_chunks)}")
 
-    except Exception as e:
-        print(f"Error: {e}")
+#     except Exception as e:
+#         print(f"Error: {e}")
