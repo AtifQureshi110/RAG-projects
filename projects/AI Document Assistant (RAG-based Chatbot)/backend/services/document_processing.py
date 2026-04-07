@@ -127,7 +127,7 @@ def process_document(file_path: str) -> List[str]:
     chunks = split_text(cleaned_text)
     return chunks
 
-# ================== 🔽 TESTING BLOCK ==================
+# ================== TESTING BLOCK ==================
 if __name__ == "__main__":
     from pathlib import Path
 
