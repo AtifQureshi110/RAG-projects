@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 from google import genai
 import pickle
 from typing import List, Dict
+
 # -------------------- ENV & CLIENT INIT -------------------- #
 load_dotenv()  # Load variables from .env
-
 API_KEY = os.getenv("GOOGLE_API_KEY")
 if not API_KEY:
     raise ValueError("GOOGLE_API_KEY not found in .env")
@@ -27,7 +27,6 @@ def get_embedding(text: str) -> list[float] | None:
     """
     if not text or not text.strip():
         return None
-
     try:
         response = client.models.embed_content(
             model="models/gemini-embedding-001",
@@ -40,7 +39,6 @@ def get_embedding(text: str) -> list[float] | None:
     except Exception as e:
         print(f"Error generating embedding: {e}")
         return None
-
 
 # -------------------- List of Chunks Embeddings -------------------- #
 def get_embeddings(chunks: list[str]) -> list[dict]:
@@ -60,13 +58,11 @@ def get_embeddings(chunks: list[str]) -> list[dict]:
         if emb:
             results.append({"text": chunk, "embedding": emb})
         else:
-            print(f"⚠️ Skipped chunk {i} due to empty or failed embedding")
+            print(f"Skipped chunk {i} due to empty or failed embedding")
 
     return results
 
 # -------------------- Save Embeddings -------------------- #
-import pickle
-
 def save_embeddings(file_path: str, embeddings: List[Dict]) -> None:
     """
     Save embeddings to disk using pickle.
@@ -107,6 +103,7 @@ def load_embeddings(file_path: str) -> List[Dict]:
     except Exception as e:
         print(f"Error loading embeddings: {e}")
         return []
+    
 # ================== TESTING BLOCK ==================
 if __name__ == "__main__":
     from pathlib import Path
@@ -132,15 +129,11 @@ if __name__ == "__main__":
             print(f"Preview of first embedding (first 10 values): {first_emb[:10]}")
         # Step 5: Save embeddings
         save_path = project_root / "data" / "embeddings" / "kamran_taj_embeddings.pkl"
-
         # Ensure folder exists
         save_path.parent.mkdir(parents=True, exist_ok=True)
-
         save_embeddings(save_path, embeddings_data)
-
         # Step 6: Load embeddings
         loaded_embeddings = load_embeddings(save_path)
-
         print(f"Loaded embeddings count: {len(loaded_embeddings)}")
 
         # Preview loaded data
