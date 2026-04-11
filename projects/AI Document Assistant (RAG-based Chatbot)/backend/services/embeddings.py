@@ -1,5 +1,5 @@
 # embeddings.py
-import os, pickle, time
+import os, time
 from typing import List, Dict, Union
 from dotenv import load_dotenv
 from google import genai
@@ -22,6 +22,7 @@ def get_embedding(text: str) -> Union[List[float], None]:
         return None
 
     try:
+        #gemini-3.1-flash-lite-preview + gemini-embedding-001
         response = client.models.embed_content(
             model="models/gemini-embedding-001",
             contents=text
@@ -65,59 +66,49 @@ def get_embeddings(chunks: List[str]) -> List[Dict]:
             print(f"Skipped chunk {i} due to empty or failed embedding")
     return results
 
-# -------------------- Save / Load Embeddings -------------------- #
-def save_embeddings(file_path: str, embeddings: List[Dict]) -> None:
-    """Save embeddings to disk using pickle."""
-    try:
-        with open(file_path, "wb") as f:
-            pickle.dump(embeddings, f)
-        print(f"✅ Embeddings saved successfully at: {file_path}")
-    except Exception as e:
-        print(f"Error saving embeddings: {e}")
-
-
-def load_embeddings(file_path: str) -> List[Dict]:
-    """Load embeddings previously saved on disk."""
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Embeddings file not found: {file_path}")
-    with open(file_path, "rb") as f:
-        embeddings = pickle.load(f)
-    print(f"✅ Embeddings loaded successfully from: {file_path}")
-    return embeddings
-
 # ================== TESTING BLOCK ==================
+
+
+from pathlib import Path
+from document_processing import load_document, clean_text, split_text
+from pinecone_utils import upload_embeddings
+
+
 if __name__ == "__main__":
-    from pathlib import Path
-    from document_processing import load_document, clean_text, split_text
 
     project_root = Path(__file__).parent.parent.parent
     data_folder = project_root / "data" / "uploaded_docs"
-    file_path = data_folder / "kamran_taj.pdf"
 
-    try:
-        raw_text = load_document(file_path)
-        cleaned_text = clean_text(raw_text)
-        chunks = split_text(cleaned_text)
-        print(f"Total chunks received: {len(chunks)}")
+    # 🔥 GET ALL FILES
+    files = list(data_folder.glob("*"))
 
-        embeddings_data = get_embeddings(chunks)
-        print(f"Generated embeddings for {len(embeddings_data)} chunks")
+    print(f"Found {len(files)} documents")
 
-        if embeddings_data:
-            first_emb = embeddings_data[0]["embedding"]
-            print(f"Length of first embedding vector: {len(first_emb)}")
-            print(f"Preview of first embedding (first 10 values): {first_emb[:10]}")
+    for file_path in files:
+        try:
+            print(f"\nProcessing: {file_path.name}")
 
-        # Save & Load
-        save_path = project_root / "data" / "embeddings" / "kamran_taj_embeddings.pkl"
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        save_embeddings(save_path, embeddings_data)
+            # ---------------- LOAD ---------------- #
+            raw_text = load_document(file_path)
+            cleaned_text = clean_text(raw_text)
+            chunks = split_text(cleaned_text)
 
-        loaded_embeddings = load_embeddings(save_path)
-        print(f"Loaded embeddings count: {len(loaded_embeddings)}")
-        if loaded_embeddings:
-            print("Preview loaded text:", loaded_embeddings[0]["text"][:200])
-            print("Embedding length:", len(loaded_embeddings[0]["embedding"]))
+            print(f"Total chunks received: {len(chunks)}")
 
-    except Exception as e:
-        print(f"Error in embeddings pipeline: {e}")
+            # ---------------- EMBEDDINGS ---------------- #
+            embeddings_data = get_embeddings(chunks)
+
+            print(f"Embeddings generated: {len(embeddings_data)}")
+
+            # ---------------- UPLOAD TO PINECONE ---------------- #
+            file_name = file_path.stem
+
+            upload_embeddings(
+                embeddings_data=embeddings_data,
+                document_name=file_name
+            )
+
+            print(f"Uploaded: {file_name}")
+
+        except Exception as e:
+            print(f"Error processing {file_path.name}: {e}")
