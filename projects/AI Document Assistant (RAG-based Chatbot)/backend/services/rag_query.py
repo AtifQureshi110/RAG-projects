@@ -1,147 +1,120 @@
-import os, math, time
 from typing import List, Dict
-from dotenv import load_dotenv
-from google import genai
 from embeddings import load_embeddings, get_embedding_safe
+import numpy as np
+from google import genai
+import os
+from dotenv import load_dotenv
 
-# -------------------- Setup -------------------- #
 load_dotenv()
-API_KEY = os.getenv("GOOGLE_API_KEY")
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
-if not API_KEY:
-    raise ValueError("GOOGLE_API_KEY not found")
+# -------------------- Similarity Function -------------------- #
+def cosine_similarity(a: List[float], b: List[float]) -> float:
+    a, b = np.array(a), np.array(b)
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-client = genai.Client(api_key=API_KEY)
 
-# -------------------- Cosine Similarity -------------------- #
-def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
-    dot_product = sum(a * b for a, b in zip(vec1, vec2))
-    norm_a = math.sqrt(sum(a * a for a in vec1))
-    norm_b = math.sqrt(sum(b * b for b in vec2))
-
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-
-    return dot_product / (norm_a * norm_b)
-
-# -------------------- Retrieve Top-K -------------------- #
+# -------------------- Retrieval -------------------- #
 def retrieve_top_k(query: str, embeddings_data: List[Dict], k: int = 3) -> List[Dict]:
-    query_embedding = get_embedding_safe(query)
+    query_emb = get_embedding_safe(query)
 
-    if query_embedding is None:
+    if not query_emb:
         return []
 
     scored_chunks = []
 
     for item in embeddings_data:
-        score = cosine_similarity(query_embedding, item["embedding"])
+        score = cosine_similarity(query_emb, item["embedding"])
         scored_chunks.append({
             "text": item["text"],
-            "score": score
+            "score": score,
+            "source": item.get("source", "unknown")
         })
 
+    # Sort by similarity score (descending)
     scored_chunks.sort(key=lambda x: x["score"], reverse=True)
+
     return scored_chunks[:k]
 
-# -------------------- Build Prompt -------------------- #
-def build_prompt(query: str, context_chunks: List[Dict], history: List[Dict] = None) -> str:
-    """
-    Create prompt with:
-    - retrieved context
-    - optional chat history
-    """
 
-    context_text = "\n\n".join(
-        [f"[Chunk {i+1}]: {c['text']}" for i, c in enumerate(context_chunks)]
-    )
+# -------------------- Generation -------------------- #
+def generate_answer(query: str, chunks: List[Dict], history: List[Dict] = None) -> str:
+
+    context_text = "\n\n".join([c["text"] for c in chunks])
 
     history_text = ""
     if history:
-        for h in history[-3:]:  # last 3 turns only
-            history_text += f"User: {h['user']}\nAssistant: {h['assistant']}\n"
+        history_text = "\n".join([
+            f"User: {h['user']}\nAssistant: {h['assistant']}"
+            for h in history[-3:]
+        ])
 
     prompt = f"""
 You are a helpful AI assistant.
 
-Answer the question based on:
-1. Provided context
-2. Conversation history (if relevant)
+Use ONLY the provided context. Use conversation history only to understand references like "it", "he", or "that".
+
+IMPORTANT:
+- Identify which topic the user is referring to
+- Do NOT mix information from different documents
+- If the question refers to a different topic, switch context accordingly
 
 Rules:
-- Prefer exact information from context
-- If partially available, you may infer carefully BUT do not guess names, facts, or roles
-- Do NOT introduce external knowledge
-- If answer is not clearly supported, say:
-  "Answer not found in provided documents"
-
-Conversation History:
-{history_text}
+- Do NOT guess
+- Do NOT add external knowledge
+- Do NOT include XML, JSON, tags, or formatting
+- Do NOT show reasoning or scratchpad
+- Answer in a natural, conversational tone
+- If answer is not clearly in context, say:
+  "I couldn’t find that information in the provided documents."
 
 Context:
 {context_text}
 
+History:
+{history_text}
+
 Question:
 {query}
 
-Answer in a clear and human-friendly way:
+Answer:
 """
-
-    return prompt
-
-# -------------------- Generate Answer -------------------- #
-
-
-def generate_answer(query: str, retrieved_chunks: List[Dict], history: List[Dict] = None) -> str:
-    prompt = build_prompt(query, retrieved_chunks, history)
-
-    retries = 3
-    for attempt in range(retries):
+    for i in range(3):
         try:
             response = client.models.generate_content(
                 model="models/gemini-2.5-flash",
                 contents=prompt
             )
-            return response.text
+            return response.text.strip()
 
         except Exception as e:
-            print(f"Attempt {attempt+1} failed: {e}")
-            time.sleep(2)
+            return f"Error generating answer: {e}"
+    return "Temporary server issue, please try again"
 
-    return "Model is currently busy. Please try again."
-    
-# -------------------- Main RAG Pipeline -------------------- #
-def rag_pipeline(query: str, embeddings_path: str, history: List[Dict] = None) -> Dict:
-    """
-    Full RAG flow:
-    query → retrieve → generate → return answer + sources
-    """
-    embeddings_data = load_embeddings(embeddings_path)
 
+# -------------------- RAG Pipeline -------------------- #
+def rag_pipeline(query: str, embeddings_data: List[Dict], history: List[Dict] = None) -> Dict:
     if not embeddings_data:
         return {"answer": "No embeddings found", "sources": []}
 
     # Step 1: Retrieve
     top_chunks = retrieve_top_k(query, embeddings_data, k=3)
-    # DEBUG: show what model is actually reading
+    # ✅ ADD THIS HERE
+    if not top_chunks:
+        return {
+            "answer": "Answer not found in provided documents",
+            "sources": []
+        }
 
-    # uncommit this if you want to see the chuck 
-
-    # print("\nTop Retrieved Chunk:\n")
-    # if top_chunks:
-    #     print(top_chunks[0]["text"][:500])
-    # else:
-    #     print("No chunks retrieved")
-
-    # Step 2: Generate answer
+    # Step 2: Generate
     answer = generate_answer(query, top_chunks, history)
 
-    # Step 3: Prepare sources
-    sources = []
-    for c in top_chunks:
-        sources.append({
-            "text": c["text"][:200],
-            "score": c["score"]
-        })
+    # Step 3: Sources
+    sources = [{
+        "text": c["text"][:200],
+        "score": c["score"],
+        "source": c["source"]
+    } for c in top_chunks]
 
     return {
         "answer": answer,
@@ -153,30 +126,54 @@ if __name__ == "__main__":
     from pathlib import Path
 
     project_root = Path(__file__).parent.parent.parent
-    embeddings_path = project_root / "data" / "embeddings" / "kamran_taj_embeddings.pkl"
+    embeddings_folder = project_root / "data" / "embeddings"
 
-    # simple memory
+    all_embeddings = []
+    loaded_files = []
+
+    # Load all embeddings once
+    for file in embeddings_folder.glob("*.pkl"):
+        data = load_embeddings(file)
+        all_embeddings.extend(data)
+        loaded_files.append(file.stem)
+
+    if not all_embeddings:
+        print("No embeddings found. Please generate embeddings first.")
+        exit()
+
+    print(f"\nTotal documents loaded: {len(loaded_files)}")
+    print("Documents:", loaded_files)
+
+    # Chat memory
     chat_history = []
 
     try:
         while True:
-            query = input("\nAsk a question (or 'exit'): ")
+            query = input("\nAsk a question (or 'exit'): ").lower().strip()
 
             if query.lower() == "exit":
                 break
 
-            result = rag_pipeline(query, embeddings_path, chat_history)
+            # Optional: handle document listing
+            if "documents" in query.lower() or "files" in query.lower():
+                print("\nAvailable documents:")
+                for doc in loaded_files:
+                    print("-", doc)
+                continue
+
+            result = rag_pipeline(query, all_embeddings, chat_history)
 
             print("\nAnswer:\n")
             print(result["answer"])
 
-            print("\nSources:\n")
+            # print("\nSources:\n")
             # for i, s in enumerate(result["sources"]):
             #     print(f"Rank {i+1} | Score: {s['score']:.4f}")
+            #     print(f"Source: {s['source']}")
             #     print(s["text"])
             #     print("-" * 40)
 
-            # update memory
+            # Save memory
             chat_history.append({
                 "user": query,
                 "assistant": result["answer"]
@@ -184,3 +181,5 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(f"Error: {e}")
+
+
