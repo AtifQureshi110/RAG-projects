@@ -29,71 +29,9 @@ The system retrieves relevant context using vector search and generates accurate
 ---
 
 ## System Architecture
-                                               +--------------------------+
-                            |      USER (Browser)      |
-                            |   Streamlit Frontend     |
-                            +------------+-------------+
-                                         |
-                                         | HTTP Requests
-                                         v
-                            +--------------------------+
-                            |   FASTAPI BACKEND API    |
-                            |   (Core Orchestrator)    |
-                            +------------+-------------+
-                                         |
-         +-------------------------------+-------------------------------+
-         |                               |                               |
-         v                               v                               v
-+------------------+      +--------------------------+     +------------------------+
-| Upload Service   |      | Query / RAG Engine       |     | Document Manager      |
-|                  |      |                          |     |                        |
-| File Storage     |      | Retrieval System        |     | List / Delete API     |
-+--------+---------+      +------------+-------------+     +-----------+------------+
-         |                             |                               |
-         +-------------+---------------+---------------+---------------+
-                       |
-                       v
-        +------------------------------------------------------+
-        |           DOCUMENT PROCESSING PIPELINE              |
-        |                                                      |
-        |  PDF / TXT / DOCX                                   |
-        |        ↓                                             |
-        |  Text Extraction                                    |
-        |        ↓                                             |
-        |  Chunking (with overlap)                            |
-        +---------------------+--------------------------------+
-                              |
-                              v
-        +------------------------------------------------------+
-        |        EMBEDDING SERVICE (Gemini API)               |
-        |   Text Chunks → Vector Embeddings (3072-d)          |
-        +---------------------+--------------------------------+
-                              |
-                              v
-        +------------------------------------------------------+
-        |           PINECONE VECTOR DATABASE                  |
-        |  Stores vectors + metadata (doc_name, doc_id)      |
-        +---------------------+--------------------------------+
-                              |
-                              v
-        +------------------------------------------------------+
-        |             RETRIEVAL ENGINE (RAG)                  |
-        |   Query → Embedding → Top-K Similar Chunks          |
-        +---------------------+--------------------------------+
-                              |
-                              v
-        +------------------------------------------------------+
-        |            LLM GENERATION (Gemini)                  |
-        |   Context + History → Prompt → Final Answer         |
-        +---------------------+--------------------------------+
-                              |
-                              v
-                     +----------------------+
-                     |  RESPONSE TO USER    |
-                     +----------------------+
+data/images and videos/mermaid-diagram.png
 
 ---
-
 ## How It Works
 1. User uploads document
 2. Document is chunked
