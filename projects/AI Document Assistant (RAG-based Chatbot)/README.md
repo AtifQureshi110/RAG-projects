@@ -54,9 +54,6 @@ data/screenshots/mermaid-diagram.png
 
 ## Screenshots
 data/screenshots/UI_01.jpg
-data/screenshots/UI_02.jpg
-data/screenshots/UI_03.jpg
-
 ---
 
 ## Setup Instructions
