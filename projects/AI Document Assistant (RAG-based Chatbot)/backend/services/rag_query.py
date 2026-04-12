@@ -1,5 +1,6 @@
 from typing import List, Dict
-from embeddings import load_embeddings, get_embedding_safe
+from backend.services.embeddings import get_embedding_safe
+from backend.services.pinecone_utils import pc, INDEX_NAME
 import numpy as np
 from google import genai
 import os
@@ -8,34 +9,36 @@ from dotenv import load_dotenv
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# -------------------- Similarity Function -------------------- #
-def cosine_similarity(a: List[float], b: List[float]) -> float:
-    a, b = np.array(a), np.array(b)
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
-
 # -------------------- Retrieval -------------------- #
-def retrieve_top_k(query: str, embeddings_data: List[Dict], k: int = 3) -> List[Dict]:
+
+def retrieve_top_k(query: str, k: int = 3):
+    # 1. Convert query → embedding
     query_emb = get_embedding_safe(query)
 
     if not query_emb:
         return []
 
+    # 2. Connect to index
+    index = pc.Index(INDEX_NAME)
+
+    # 3. Pinecone search (REAL VECTOR SEARCH)
+    results = index.query(
+        vector=query_emb,
+        top_k=k,
+        include_metadata=True
+    )
+
+    # 4. Format response
     scored_chunks = []
 
-    for item in embeddings_data:
-        score = cosine_similarity(query_emb, item["embedding"])
+    for match in results["matches"]:
         scored_chunks.append({
-            "text": item["text"],
-            "score": score,
-            "source": item.get("source", "unknown")
+            "text": match["metadata"]["text"],
+            "score": match["score"],
+            "source": match["metadata"].get("source", "unknown")
         })
 
-    # Sort by similarity score (descending)
-    scored_chunks.sort(key=lambda x: x["score"], reverse=True)
-
-    return scored_chunks[:k]
-
+    return scored_chunks
 
 # -------------------- Generation -------------------- #
 def generate_answer(query: str, chunks: List[Dict], history: List[Dict] = None) -> str:
@@ -52,29 +55,30 @@ def generate_answer(query: str, chunks: List[Dict], history: List[Dict] = None) 
     prompt = f"""
 You are a helpful AI assistant.
 
-Use ONLY the provided context. Use conversation history only to understand references like "it", "he", or "that".
+You have TWO sources of information:
+1. Conversation History (past chat)
+2. Retrieved Documents
 
-IMPORTANT:
-- Identify which topic the user is referring to
-- Do NOT mix information from different documents
-- If the question refers to a different topic, switch context accordingly
+INSTRUCTIONS:
+- If the question is about past conversation (e.g., "what did I ask before"), use ONLY the history.
+- If the question is about documents, use ONLY the document context.
+- Do NOT mix unrelated information.
+- Decide intelligently which source to use.
 
 Rules:
 - Do NOT guess
 - Do NOT add external knowledge
-- Do NOT include XML, JSON, tags, or formatting
-- Do NOT show reasoning or scratchpad
-- Answer in a natural, conversational tone
-- If answer is not clearly in context, say:
+- Answer clearly and naturally
+- If answer is not found, say:
   "I couldn’t find that information in the provided documents."
 
-Context:
-{context_text}
-
-History:
+Conversation History:
 {history_text}
 
-Question:
+Document Context:
+{context_text}
+
+User Question:
 {query}
 
 Answer:
@@ -93,23 +97,37 @@ Answer:
 
 
 # -------------------- RAG Pipeline -------------------- #
-def rag_pipeline(query: str, embeddings_data: List[Dict], history: List[Dict] = None) -> Dict:
-    if not embeddings_data:
-        return {"answer": "No embeddings found", "sources": []}
+def rag_pipeline(query: str, history: list = None) -> dict:
 
-    # Step 1: Retrieve
-    top_chunks = retrieve_top_k(query, embeddings_data, k=3)
-    # ✅ ADD THIS HERE
+    if history is None:
+        history = []
+
+    # ✅ memory fast path
+    memory_keywords = ["last question", "before", "previous", "earlier", "repeat"]
+
+    if any(k in query.lower() for k in memory_keywords):
+        return {
+            "answer": history[-1]["user"] if history else "No previous question found",
+            "sources": []
+        }
+
+    # ✅ retrieval
+    top_chunks = retrieve_top_k(query, k=5)
+    top_chunks = [c for c in top_chunks if c["score"] > 0.5]
+
+    print("QUERY:", query)
+    print("CHUNKS:", len(top_chunks))
+
     if not top_chunks:
         return {
             "answer": "Answer not found in provided documents",
             "sources": []
         }
 
-    # Step 2: Generate
+    # ✅ generation
     answer = generate_answer(query, top_chunks, history)
 
-    # Step 3: Sources
+    # ✅ sources
     sources = [{
         "text": c["text"][:200],
         "score": c["score"],
@@ -121,65 +139,44 @@ def rag_pipeline(query: str, embeddings_data: List[Dict], history: List[Dict] = 
         "sources": sources
     }
 
-# -------------------- TESTING BLOCK -------------------- #
-if __name__ == "__main__":
-    from pathlib import Path
 
-    project_root = Path(__file__).parent.parent.parent
-    embeddings_folder = project_root / "data" / "embeddings"
+# # -------------------- TESTING BLOCK (PINECONE VERSION) -------------------- #
+# if __name__ == "__main__":
+#     print("\nRAG SYSTEM TEST MODE (Pinecone)\n")
 
-    all_embeddings = []
-    loaded_files = []
+#     chat_history = []
 
-    # Load all embeddings once
-    for file in embeddings_folder.glob("*.pkl"):
-        data = load_embeddings(file)
-        all_embeddings.extend(data)
-        loaded_files.append(file.stem)
+#     try:
+#         while True:
+#             query = input("\nAsk a question (or type 'exit'): ").strip()
 
-    if not all_embeddings:
-        print("No embeddings found. Please generate embeddings first.")
-        exit()
+#             if query.lower() == "exit":
+#                 print("\nExiting RAG test mode...\n")
+#                 break
 
-    print(f"\nTotal documents loaded: {len(loaded_files)}")
-    print("Documents:", loaded_files)
+#             # Optional: quick document info test
+#             if "documents" in query.lower() or "files" in query.lower():
+#                 print("\nThis system uses Pinecone (no local file list available).")
+#                 continue
 
-    # Chat memory
-    chat_history = []
+#             # Run full RAG pipeline
+#             result = rag_pipeline(query, chat_history)
 
-    try:
-        while True:
-            query = input("\nAsk a question (or 'exit'): ").lower().strip()
+#             print("\nANSWER:\n")
+#             print(result["answer"])
 
-            if query.lower() == "exit":
-                break
+#             print("\nSOURCES:")
+#             for i, s in enumerate(result["sources"], 1):
+#                 print(f"\n--- Source {i} ---")
+#                 print(f"Score: {s['score']:.4f}")
+#                 print(f"Source: {s['source']}")
+#                 print(f"Text: {s['text']}")
 
-            # Optional: handle document listing
-            if "documents" in query.lower() or "files" in query.lower():
-                print("\nAvailable documents:")
-                for doc in loaded_files:
-                    print("-", doc)
-                continue
+#             # Save chat history
+#             chat_history.append({
+#                 "user": query,
+#                 "assistant": result["answer"]
+#             })
 
-            result = rag_pipeline(query, all_embeddings, chat_history)
-
-            print("\nAnswer:\n")
-            print(result["answer"])
-
-            # print("\nSources:\n")
-            # for i, s in enumerate(result["sources"]):
-            #     print(f"Rank {i+1} | Score: {s['score']:.4f}")
-            #     print(f"Source: {s['source']}")
-            #     print(s["text"])
-            #     print("-" * 40)
-
-            # Save memory
-            chat_history.append({
-                "user": query,
-                "assistant": result["answer"]
-            })
-
-    except Exception as e:
-        print(f"Error: {e}")
-
-
+#     except Exception as e:
+#         print(f"\nError occurred: {e}")

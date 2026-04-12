@@ -108,44 +108,46 @@ def delete_document(document_name: str):
 
     index.delete(filter={"doc_id": doc_id})
 
-    print("✅ Document deleted successfully")
+    print("Document deleted successfully")
 
-if __name__ == "__main__":
+# ================== TESTING BLOCK ==================
 
-    from pathlib import Path
-    from document_processing import load_document, clean_text, split_text
-    from embeddings import get_embeddings
+# if __name__ == "__main__":
 
-    project_root = Path(__file__).parent.parent.parent
-    data_folder = project_root / "data" / "uploaded_docs"
+#     from pathlib import Path
+#     from backend.services.document_processing import load_document, clean_text, split_text
+#     from backend.services.embeddings import get_embeddings
 
-    files = list(data_folder.glob("*"))
+#     project_root = Path(__file__).parent.parent.parent
+#     data_folder = project_root / "data" / "uploaded_docs"
 
-    print(f"\nFound {len(files)} documents\n")
+#     files = list(data_folder.glob("*"))
 
-    for file_path in files:
-        try:
-            print(f"\nProcessing: {file_path.name}")
+#     print(f"\nFound {len(files)} documents\n")
 
-            # ---------------- LOAD ---------------- #
-            raw_text = load_document(file_path)
-            cleaned_text = clean_text(raw_text)
-            chunks = split_text(cleaned_text)
+#     for file_path in files:
+#         try:
+#             print(f"\nProcessing: {file_path.name}")
 
-            print(f"Total chunks: {len(chunks)}")
+#             # ---------------- LOAD ---------------- #
+#             raw_text = load_document(file_path)
+#             cleaned_text = clean_text(raw_text)
+#             chunks = split_text(cleaned_text)
 
-            # ---------------- EMBEDDINGS ---------------- #
-            embeddings_data = get_embeddings(chunks)
+#             print(f"Total chunks: {len(chunks)}")
 
-            print(f"Embeddings generated: {len(embeddings_data)}")
+#             # ---------------- EMBEDDINGS ---------------- #
+#             embeddings_data = get_embeddings(chunks)
 
-            # ---------------- UPLOAD ---------------- #
-            upload_embeddings(
-                embeddings_data=embeddings_data,
-                document_name=file_path.stem
-            )
+#             print(f"Embeddings generated: {len(embeddings_data)}")
 
-            print(f"Uploaded: {file_path.name}")
+#             # ---------------- UPLOAD ---------------- #
+#             upload_embeddings(
+#                 embeddings_data=embeddings_data,
+#                 document_name=file_path.stem
+#             )
 
-        except Exception as e:
-            print(f"Error processing {file_path.name}: {e}")
+#             print(f"Uploaded: {file_path.name}")
+
+#         except Exception as e:
+#             print(f"Error processing {file_path.name}: {e}")

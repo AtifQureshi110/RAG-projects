@@ -30,7 +30,7 @@ def load_document(file_path: str) -> str: #type hints improve readability
         )
     else:
         raise ValueError(f"Unsupported file type: {file_path.suffix}")
-    
+
 # Clean_text
 def clean_text(text: str) -> str:
     """
@@ -127,7 +127,7 @@ def process_document(file_path: str) -> List[str]:
     chunks = split_text(cleaned_text)
     return chunks
 
-# ================== TESTING BLOCK ==================
+# # ================== TESTING BLOCK ==================
 # if __name__ == "__main__":
 #     from pathlib import Path
 
@@ -137,7 +137,7 @@ def process_document(file_path: str) -> List[str]:
 #     file_path = data_folder / "refference letter_Atif_DR. ARIFA BHUTTO, PHD.pdf"
 
 #     try:
-#         # 🔹 Debug mode (step-by-step inspection)
+#         # Debug mode (step-by-step inspection)
 #         raw_text = load_document(file_path)
 #         cleaned_text = clean_text(raw_text)
 #         chunks = split_text(cleaned_text)
@@ -153,7 +153,7 @@ def process_document(file_path: str) -> List[str]:
 #             print(chunk[:300])
 #             print()
 
-#         # 🔹 Pipeline mode (final check)
+#         # Pipeline mode (final check)
 #         pipeline_chunks = process_document(file_path)
 
 #         print("\n" + "="*50)
