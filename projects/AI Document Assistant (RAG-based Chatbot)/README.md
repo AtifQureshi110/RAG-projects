@@ -29,7 +29,7 @@ The system retrieves relevant context using vector search and generates accurate
 ---
 
 ## System Architecture
-data/images and videos/mermaid-diagram.png
+data/screenshots/mermaid-diagram.png
 
 ---
 ## How It Works
@@ -53,9 +53,9 @@ data/images and videos/mermaid-diagram.png
 ---
 
 ## Screenshots
-data/images and videos/UI_01.jpg
-data/images and videos/UI_02.jpg
-data/images and videos/UI_03.jpg
+data/screenshots/UI_01.jpg
+data/screenshots/UI_02.jpg
+data/screenshots/UI_03.jpg
 
 ---
 
