@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-import re
 
 API_URL = "http://127.0.0.1:8000"
 
@@ -12,23 +11,19 @@ st.set_page_config(
 # ---------------- HEADER ---------------- #
 st.title("DocuMind AI Assistant")
 
-st.markdown(
-    """
+st.markdown("""
 This system allows you to upload multiple document formats including PDF, DOCX, and TXT.
 You can then ask questions and get answers directly from your documents using AI-powered retrieval.
-"""
-)
+""")
 
 st.divider()
 
-# ---------------- LAYOUT ---------------- #
+# ================= LEFT PANEL ================= #
 col1, col2 = st.columns([1, 2])
 
-# ================= LEFT PANEL: UPLOAD ================= #
+# ---------------- UPLOAD ---------------- #
 with col1:
     st.subheader("Document Upload")
-
-    st.markdown("Supported formats: PDF, DOCX, TXT")
 
     uploaded_file = st.file_uploader(
         "Upload your document",
@@ -36,6 +31,7 @@ with col1:
     )
 
     if st.button("Upload Document", use_container_width=True):
+
         if uploaded_file is not None:
             try:
                 files = {
@@ -51,63 +47,87 @@ with col1:
                     files=files
                 )
 
+                result = response.json()
+
                 if response.status_code == 200:
-                    st.success("Document uploaded successfully")
-                    st.json(response.json())
+                    st.success("✅ Document uploaded successfully")
+
+                    # optional: show backend response
+                    st.write(result)
+
+                    # IMPORTANT: refresh documents list after upload
+                    st.session_state.pop("docs_data", None)
+
                 else:
-                    st.error("Upload failed")
-                    st.write(response.text)
+                    st.error("❌ Upload failed")
+                    st.write(result)
 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
+
         else:
             st.warning("Please select a file before uploading")
+
 
 # ---------------- DOCUMENT LIST ---------------- #
 st.divider()
 st.subheader("Available Documents")
 
-# STEP 1: Load data
-if st.button("Show Documents"):
-    response = requests.get(f"{API_URL}/documents")
-    st.session_state["docs_data"] = response.json()
+# 🔥 ALWAYS fetch fresh data when needed
+if st.button("Refresh Documents"):
 
-# STEP 2: Always render if data exists
+    response = requests.get(f"{API_URL}/documents")
+
+    if response.status_code == 200:
+        st.session_state["docs_data"] = response.json()
+    else:
+        st.error("Failed to load documents")
+
+
+# ---------------- RENDER DOCUMENTS ---------------- #
 if "docs_data" in st.session_state:
 
     data = st.session_state["docs_data"]
 
-    if "documents" in data and "count" in data:
+    docs = data.get("documents", [])
 
-        st.write(f"Total Documents: {data['count']}")
-        st.markdown("### Documents")
+    st.write(f"Total Documents: {len(docs)}")
+    st.markdown("### Documents")
 
-        for i, doc in enumerate(data["documents"]):
+    for i, doc in enumerate(docs):
 
-            col_a, col_b = st.columns([4, 1])
+        col_a, col_b = st.columns([4, 1])
 
-            with col_a:
-                st.markdown(f"- {doc}")
+        with col_a:
+            st.markdown(f"- {doc}")
 
-            with col_b:
-                if st.button("Delete", key=f"delete_{i}"):
+        with col_b:
+            if st.button("Delete", key=f"delete_{doc}_{i}"):
 
+                try:
                     response = requests.delete(
                         f"{API_URL}/documents/{doc}"
                     )
 
                     result = response.json()
 
-                    if "error" in result:
-                        st.error(result["error"])
-                    else:
-                        st.success(result["message"])
+                    if response.status_code == 200:
+                        st.success(f"🗑 Deleted: {doc}")
 
-                        # refresh data
-                        del st.session_state["docs_data"]
+                        # 🔥 FORCE REFRESH AFTER DELETE
+                        st.session_state.pop("docs_data", None)
                         st.rerun()
-# ================= RIGHT PANEL: CHAT ================= #
+
+                    else:
+                        st.error(result.get("error", "Delete failed"))
+
+                except Exception as e:
+                    st.error(f"Request error: {str(e)}")
+
+
+# ================= RIGHT PANEL ================= #
 with col2:
+
     st.subheader("Ask Questions from Documents")
 
     if "chat_history" not in st.session_state:
@@ -125,6 +145,7 @@ with col2:
 
     if clear_btn:
         st.session_state.chat_history = []
+        st.rerun()
 
     if ask_btn and query:
         try:
@@ -147,6 +168,7 @@ with col2:
 
     # ---------------- CHAT DISPLAY ---------------- #
     for chat in reversed(st.session_state.chat_history):
+
         st.markdown("**Question:**")
         st.write(chat["question"])
 
@@ -154,4 +176,3 @@ with col2:
         st.write(chat["answer"])
 
         st.divider()
-
