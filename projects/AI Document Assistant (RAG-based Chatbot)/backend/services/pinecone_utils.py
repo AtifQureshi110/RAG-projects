@@ -70,7 +70,7 @@ def upload_embeddings(embeddings_data: List[Dict], document_name: str):
             "values": item["embedding"],
             "metadata": {
                 "text": item["text"],
-                "source": document_name,   # 🔥 THIS IS YOUR MAIN KEY
+                "source": document_name,   # THIS IS MAIN KEY
                 "doc_id": doc_id,
                 "chunk_hash": chunk_hash
             }
@@ -90,7 +90,7 @@ def delete_document(document_name: str):
 
     print(f"Deleting document: {document_name}")
 
-    # 🔥 FINAL FIX: DELETE BY SOURCE (NOT doc_id)
+    # FINAL FIX: DELETE BY SOURCE (NOT doc_id)
     index.delete(
         filter={
             "source": document_name
