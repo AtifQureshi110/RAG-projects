@@ -3,47 +3,36 @@ import hashlib
 from typing import List, Dict
 from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
-import hashlib
 
-
-# -------------------- ENV SETUP -------------------- #
+# -------------------- ENV -------------------- #
 load_dotenv()
+
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 
 if not PINECONE_API_KEY:
-    raise ValueError("PINECONE_API_KEY not found in environment variables")
+    raise ValueError("PINECONE_API_KEY not found")
 
-# Init Pinecone client
 pc = Pinecone(api_key=PINECONE_API_KEY)
 
-# Index name
 INDEX_NAME = "ai-multi-document-assistant-chatbot"
 
-
 # -------------------- HELPERS -------------------- #
-
 def get_dimension(embeddings_data: List[Dict]) -> int:
-    """Dynamically detect embedding dimension."""
     if not embeddings_data:
-        raise ValueError("Embeddings data is empty")
-
+        raise ValueError("Embeddings empty")
     return len(embeddings_data[0]["embedding"])
 
-
 def generate_doc_id(document_name: str) -> str:
-    """Generate unique hash for document."""
     return hashlib.md5(document_name.encode()).hexdigest()
 
+def get_chunk_hash(text: str) -> str:
+    return hashlib.md5(text.encode()).hexdigest()
 
-# -------------------- INDEX MANAGEMENT -------------------- #
-
+# -------------------- INDEX -------------------- #
 def get_index(dimension: int):
-    """Create index if not exists, otherwise connect."""
-    existing_indexes = [i["name"] for i in pc.list_indexes()]
+    existing = [i["name"] for i in pc.list_indexes()]
 
-    if INDEX_NAME not in existing_indexes:
-        print(f"Creating Pinecone index (dim={dimension})...")
-
+    if INDEX_NAME not in existing:
         pc.create_index(
             name=INDEX_NAME,
             dimension=dimension,
@@ -54,59 +43,59 @@ def get_index(dimension: int):
             )
         )
 
-        print("Index created successfully")
-
     return pc.Index(INDEX_NAME)
 
-# -------------------- UPLOAD EMBEDDINGS -------------------- #
-def get_chunk_hash(text: str) -> str:
-    return hashlib.md5(text.encode()).hexdigest()
-
+# -------------------- UPLOAD -------------------- #
 def upload_embeddings(embeddings_data: List[Dict], document_name: str):
 
     if not embeddings_data:
-        print("No embeddings to upload")
         return
 
     dimension = get_dimension(embeddings_data)
     index = get_index(dimension)
 
+    # IMPORTANT: normalize name (VERY IMPORTANT FIX)
+    document_name = document_name.strip()
+
     doc_id = generate_doc_id(document_name)
 
     vectors = []
 
-    for i, item in enumerate(embeddings_data):
+    for item in embeddings_data:
 
-        # create chunk-level hash INSIDE loop
         chunk_hash = get_chunk_hash(item["text"])
 
         vectors.append({
-            "id": f"{doc_id}-{chunk_hash}",   # FIXED (content-based ID)
+            "id": f"{doc_id}-{chunk_hash}",
             "values": item["embedding"],
             "metadata": {
                 "text": item["text"],
-                "source": document_name,
+                "source": document_name,   # 🔥 THIS IS YOUR MAIN KEY
                 "doc_id": doc_id,
-                "chunk_hash": chunk_hash   # (optional but recommended)
+                "chunk_hash": chunk_hash
             }
         })
 
-    batch_size = 100
+    for i in range(0, len(vectors), 100):
+        index.upsert(vectors=vectors[i:i+100])
 
-    for i in range(0, len(vectors), batch_size):
-        index.upsert(vectors=vectors[i:i + batch_size])
+    print(f"Uploaded {len(vectors)} vectors for {document_name}")
 
-    print(f"Uploaded {len(vectors)} vectors for '{document_name}'")
-# -------------------- OPTIONAL: DELETE DOCUMENT -------------------- #
-
+# -------------------- DELETE (FIXED) -------------------- #
 def delete_document(document_name: str):
-    """Delete all vectors of a specific document."""
-    doc_id = generate_doc_id(document_name)
+
     index = pc.Index(INDEX_NAME)
 
-    print(f"🗑 Deleting document: {document_name}")
+    document_name = document_name.strip()
 
-    index.delete(filter={"doc_id": doc_id})
+    print(f"Deleting document: {document_name}")
+
+    # 🔥 FINAL FIX: DELETE BY SOURCE (NOT doc_id)
+    index.delete(
+        filter={
+            "source": document_name
+        }
+    )
 
     print("Document deleted successfully")
 
