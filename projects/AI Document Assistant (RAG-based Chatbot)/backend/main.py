@@ -1,8 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 from pathlib import Path
-import shutil, uuid, re
+import shutil, uuid
 from pydantic import BaseModel
-from collections import defaultdict
 
 from backend.services.document_processing import process_document
 from backend.services.embeddings import get_embeddings
@@ -17,10 +16,13 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CHAT_HISTORY = []
 
 
+# ---------------- ROOT ---------------- #
 @app.get("/")
 def root():
     return {"message": "API is running"}
 
+
+# ---------------- UPLOAD ---------------- #
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
 
@@ -40,9 +42,10 @@ async def upload_document(file: UploadFile = File(...)):
         embeddings_data = get_embeddings(chunks)
         print("EMBEDDINGS:", len(embeddings_data))
 
+        # source must be consistent
         upload_embeddings(
             embeddings_data=embeddings_data,
-            document_name=file.filename
+            document_name=file.filename.strip()
         )
 
         print("UPLOAD DONE")
@@ -54,9 +57,11 @@ async def upload_document(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        print("ERROR OCCURRED:", str(e))
+        print("ERROR:", str(e))
         return {"error": str(e)}
 
+
+# ---------------- QUERY ---------------- #
 class QueryRequest(BaseModel):
     query: str
 
@@ -76,9 +81,11 @@ def query_rag(request: QueryRequest):
 
     return result
 
-import re 
+
+# ---------------- DOCUMENT LIST ---------------- #
 @app.get("/documents")
 def list_documents():
+
     try:
         index = pc.Index(INDEX_NAME)
 
@@ -97,17 +104,8 @@ def list_documents():
             meta = match.get("metadata", {})
 
             if "source" in meta:
-                raw_name = meta["source"]
+                docs.add(meta["source"])
 
-                clean_name = re.sub(
-                    r'^[a-f0-9\-]{36}_',
-                    '',
-                    raw_name
-                )
-
-                docs.add(clean_name.strip())
-
-        # ✅ RETURN OUTSIDE LOOP (IMPORTANT FIX)
         return {
             "documents": list(docs),
             "count": len(docs)
@@ -117,34 +115,21 @@ def list_documents():
         return {"error": str(e)}
 
 
+# ---------------- DELETE DOCUMENT ---------------- #
 @app.delete("/documents/{document_name}")
 def delete_document(document_name: str):
+
     try:
         index = pc.Index(INDEX_NAME)
 
-        doc_id = None
+        document_name = document_name.strip()
 
-        # 1. find vectors belonging to document
-        query_response = index.query(
-            vector=[0] * 3072,   # or dynamic dimension if you want
-            top_k=10000,
-            include_metadata=True
-        )
+        print(f"Deleting document: {document_name}")
 
-        for match in query_response["matches"]:
-            meta = match.get("metadata", {})
-
-            if meta.get("source") == document_name:
-                doc_id = meta.get("doc_id")
-                break
-
-        if not doc_id:
-            return {"error": "Document not found"}
-
-        # 2. delete using filter
+        # ONLY THIS IS REQUIRED
         index.delete(
             filter={
-                "doc_id": doc_id
+                "source": document_name
             }
         )
 
