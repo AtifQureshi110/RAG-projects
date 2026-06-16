@@ -50,7 +50,7 @@ with col1:
                 result = response.json()
 
                 if response.status_code == 200:
-                    st.success("✅ Document uploaded successfully")
+                    st.success("Document uploaded successfully")
 
                     # optional: show backend response
                     st.write(result)
@@ -59,7 +59,7 @@ with col1:
                     st.session_state.pop("docs_data", None)
 
                 else:
-                    st.error("❌ Upload failed")
+                    st.error("Upload failed")
                     st.write(result)
 
             except Exception as e:
@@ -73,7 +73,7 @@ with col1:
 st.divider()
 st.subheader("Available Documents")
 
-# 🔥 ALWAYS fetch fresh data when needed
+# ALWAYS fetch fresh data when needed
 if st.button("Refresh Documents"):
 
     response = requests.get(f"{API_URL}/documents")
@@ -114,7 +114,7 @@ if "docs_data" in st.session_state:
                     if response.status_code == 200:
                         st.success(f"🗑 Deleted: {doc}")
 
-                        # 🔥 FORCE REFRESH AFTER DELETE
+                        # FORCE REFRESH AFTER DELETE
                         st.session_state.pop("docs_data", None)
                         st.rerun()
 
